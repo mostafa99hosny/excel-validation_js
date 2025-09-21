@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel Validation Tool</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+  <style>
+    body { background: #f7f8fa; color: #111; font-family: 'Cairo', 'Tajawal', Arial, sans-serif; }
+    .main-title { font-weight: 900; font-size: 2.5em; background: linear-gradient(90deg, #FFDE21 0%, #FFD700 100%); border-radius: 18px; padding: 0.5em 1em; box-shadow: 0 4px 32px #ffe06633; display: inline-block; margin-bottom: 0.5em; }
+    .main-desc { font-size: 1.2em; margin-bottom: 1.5em; }
+    .result-box { background: #fff; border-radius: 14px; padding: 1.2em; margin-bottom: 1.5em; box-shadow: 0 2px 12px #ffe06655; }
+    .btn-main { background: linear-gradient(90deg, #21a366 0%, #43c97f 100%); color: #fff; border-radius: 12px; font-weight: bold; border: none; box-shadow: 0 4px 16px #21a36633; padding: 0.75em 2em; font-size: 1.1em; margin-bottom: 12px; letter-spacing: 0.5px; }
+    .btn-main:hover { background: linear-gradient(90deg, #43c97f 0%, #21a366 100%); color: #fff; box-shadow: 0 6px 24px #21a36655; transform: scale(1.04); }
+  </style>
+</head>
+<body>
+  <div class="container py-5">
+    <div class="main-title animate__animated animate__fadeInDown">أداة التحقق من ملف إكسل - Excel Validation Tool</div>
+    <div class="main-desc animate__animated animate__fadeIn">قم برفع ملف Excel بصيغة xlsx للتحقق من الحقول والقيم وفقًا للقواعد المحددة، ثم تنزيل ملف معدل مع إبراز الأخطاء.</div>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <input class="form-control" type="file" name="file" id="fileInput" accept=".xlsx" required>
+      </div>
+      <div class="row mb-4" style="justify-content:center;">
+        <div class="col-auto">
+          <button type="button" class="btn btn-main" id="btnCheckAll">Check All</button>
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-main" id="btnCheckDate">Check Date Format</button>
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-main" id="btnCheckMandatory">Check Mandatory Fields</button>
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-main" id="btnCheckFinal">Check Final Value</button>
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-main" id="btnSumAsset">Sum Asset Values</button>
+        </div>
+      </div>
+    </form>
+    <div id="summary" class="result-box" style="display:none;"></div>
+    <div id="previewTable" class="table-responsive" style="display:none;"></div>
+    <div id="downloadLink" style="display:none;"></div>
+  </div>
+  <script>
+    let lastFile = null;
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      lastFile = e.target.files[0];
+    });
+    async function runCheck(type) {
+      if (!lastFile) return;
+      const formData = new FormData();
+      formData.append('file', lastFile);
+      document.getElementById('summary').style.display = 'block';
+      document.getElementById('summary').innerHTML = 'جاري التحقق من الملف...';
+      document.getElementById('previewTable').style.display = 'none';
+      document.getElementById('downloadLink').style.display = 'none';
+      try {
+        // Preview and summary fetch
+        const previewResp = await fetch('/validate-preview?type=' + type, {
+          method: 'POST',
+          body: formData
+        });
+        if (!previewResp.ok) throw new Error('فشل التحقق من الملف');
+        const { header, preview, summary } = await previewResp.json();
+        // Show summary
+        document.getElementById('summary').innerHTML = '<b>الملخص:</b><ul>' + summary.map(s => `<li>${s}</li>`).join('') + '</ul>';
+        // Show preview table
+        let table = '<table class="table table-bordered table-striped"><thead><tr>';
+        header.forEach(col => { table += `<th>${col}</th>`; });
+        table += '</tr></thead><tbody>';
+        preview.forEach(row => {
+          table += '<tr>';
+          header.forEach(col => {
+            const cell = row[col];
+            if (cell.highlight) {
+              table += `<td style="background:#FFDE21; color:#111; font-weight:bold;">${cell.value}</td>`;
+            } else {
+              table += `<td>${cell.value}</td>`;
+            }
+          });
+          table += '</tr>';
+        });
+        table += '</tbody></table>';
+        document.getElementById('previewTable').innerHTML = table;
+        document.getElementById('previewTable').style.display = 'block';
+        // Download button logic (unchanged)
+        const downloadResp = await fetch('/validate?type=' + type, {
+          method: 'POST',
+          body: formData
+        });
+        if (!downloadResp.ok) throw new Error('فشل إنشاء الملف المعدل');
+        const blob = await downloadResp.blob();
+        const url = window.URL.createObjectURL(blob);
+        document.getElementById('downloadLink').innerHTML = `<a href="${url}" download="validated.xlsx" class="btn btn-main">تنزيل الملف المعدل</a>`;
+        document.getElementById('downloadLink').style.display = 'block';
+      } catch (err) {
+        document.getElementById('summary').innerHTML = 'حدث خطأ أثناء التحقق: ' + err.message;
+        document.getElementById('previewTable').style.display = 'none';
+      }
+    }
+    document.getElementById('btnCheckAll').onclick = () => {
+      if (!lastFile) {
+        document.getElementById('summary').innerHTML = '<span style="color:#a80000;font-weight:bold;">يرجى رفع ملف Excel أولاً.</span>';
+        document.getElementById('summary').style.display = 'block';
+        return;
+      }
+      runCheck('all');
+    };
+    document.getElementById('btnCheckDate').onclick = () => {
+      if (!lastFile) {
+        document.getElementById('summary').innerHTML = '<span style="color:#a80000;font-weight:bold;">يرجى رفع ملف Excel أولاً.</span>';
+        document.getElementById('summary').style.display = 'block';
+        return;
+      }
+      runCheck('date');
+    };
+    document.getElementById('btnCheckMandatory').onclick = () => {
+      if (!lastFile) {
+        document.getElementById('summary').innerHTML = '<span style="color:#a80000;font-weight:bold;">يرجى رفع ملف Excel أولاً.</span>';
+        document.getElementById('summary').style.display = 'block';
+        return;
+      }
+      runCheck('mandatory');
+    };
+    document.getElementById('btnCheckFinal').onclick = () => {
+      if (!lastFile) {
+        document.getElementById('summary').innerHTML = '<span style="color:#a80000;font-weight:bold;">يرجى رفع ملف Excel أولاً.</span>';
+        document.getElementById('summary').style.display = 'block';
+        return;
+      }
+      runCheck('final');
+    };
+    document.getElementById('btnSumAsset').onclick = async function() {
+      if (!lastFile) {
+        document.getElementById('summary').innerHTML = '<span style="color:#a80000;font-weight:bold;">يرجى رفع ملف Excel أولاً.</span>';
+        document.getElementById('summary').style.display = 'block';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', lastFile);
+      try {
+        const resp = await fetch('/validate-preview?type=sum', { method: 'POST', body: formData });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || 'فشل حساب المجموع');
+        }
+        const { total } = await resp.json();
+        document.getElementById('summary').innerHTML = `<b>مجموع final_value:</b> <span style='font-size:2em; color:#21a366;'>${Number(total).toLocaleString('en')}</span>`;
+        document.getElementById('summary').style.display = 'block';
+        document.getElementById('previewTable').style.display = 'none';
+        document.getElementById('downloadLink').style.display = 'none';
+      } catch (err) {
+        document.getElementById('summary').innerHTML = 'حدث خطأ أثناء الحساب: ' + err.message;
+        document.getElementById('summary').style.display = 'block';
+        document.getElementById('previewTable').style.display = 'none';
+        document.getElementById('downloadLink').style.display = 'none';
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "validation(excel)-_js",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mostafa99hosny/excel-validation-dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mostafa99hosny/excel-validation-dashboard/issues"
+  },
+  "homepage": "https://github.com/mostafa99hosny/excel-validation-dashboard#readme",
+  "description": "",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  }
+}
