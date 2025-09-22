@@ -59,6 +59,7 @@ function checkMissingColumns(header) {
 function validateFinalValueOnly(rows, header) {
   let issues = 0;
   const highlights = {};
+  let summary = [];
   rows.forEach((row, idx) => {
     const colIdx = header.indexOf('final_value');
     if (colIdx === -1) return;
@@ -76,12 +77,19 @@ function validateFinalValueOnly(rows, header) {
       row[colIdx] = appendMessage(row[colIdx], message);
     }
   });
-  return { rows, highlights, summary: [`Final Value issues: ${issues}`] };
+  if (issues === 0) {
+    summary.push('✅ جميع القيم في final_value مكتملة وصحيحة.\nتم التحقق من أن جميع القيم أرقام صحيحة وغير عشرية.');
+  } else {
+    summary.push(`❌ عدد القيم غير الصحيحة في final_value: ${issues}`);
+    summary.push('↳ يجب أن تكون القيم في final_value أرقامًا صحيحة وغير عشرية.');
+  }
+  return { rows, highlights, summary };
 }
 
 function validateMandatoryOnly(rows, header) {
   let missingCount = 0;
   const highlights = {};
+  let summary = [];
   rows.forEach((row, idx) => {
     MANDATORY_FIELDS.forEach(col => {
       const colIdx = header.indexOf(col);
@@ -104,14 +112,21 @@ function validateMandatoryOnly(rows, header) {
       }
     });
   });
-  return { rows, highlights, summary: [`Missing mandatory values: ${missingCount}`] };
+  if (missingCount === 0) {
+    summary.push('✅ جميع الحقول الإلزامية مكتملة وصحيحة.\nتم التحقق من عدم وجود أي قيم فارغة في الحقول الإلزامية.');
+  } else {
+    summary.push(`❌ عدد الحقول الإلزامية الفارغة: ${missingCount}`);
+    summary.push('↳ يجب تعبئة جميع الحقول الإلزامية وعدم تركها فارغة.');
+  }
+  return { rows, highlights, summary };
 }
 
 function validateDatesOnly(rows, header) {
   let invalidCount = 0, autoFixed = 0;
   const highlights = {};
   const colIdx = header.indexOf('inspection_date');
-  if (colIdx === -1) return { rows, highlights, summary: ["Column 'inspection_date' is missing"] };
+  let summary = [];
+  if (colIdx === -1) return { rows, highlights, summary: ["❌ العمود inspection_date غير موجود في الملف."] };
   rows.forEach((row, idx) => {
     let val = row[colIdx];
     if (isEmpty(val)) {
@@ -125,15 +140,15 @@ function validateDatesOnly(rows, header) {
     let dt = null;
     let formatted = null;
     // Try dd-mm-yyyy
-    let m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    let m = s.match(/^\d{2}-\d{2}-\d{4}$/);
     if (m) {
-      formatted = `${m[1]}-${m[2]}-${m[3]}`;
+      formatted = s;
       dt = true;
     } else {
       // Try yyyy-mm-dd
-      m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      m = s.match(/^\d{4}-\d{2}-\d{2}$/);
       if (m) {
-        formatted = `${m[3]}-${m[2]}-${m[1]}`;
+        formatted = `${m[0].slice(8,10)}-${m[0].slice(5,7)}-${m[0].slice(0,4)}`;
         dt = true;
       }
     }
@@ -146,8 +161,150 @@ function validateDatesOnly(rows, header) {
       invalidCount++;
     }
   });
-  let summary = [`Invalid dates: ${invalidCount}`];
-  if (autoFixed) summary.push(`Dates auto-formatted: ${autoFixed}`);
+  if (invalidCount === 0) {
+    summary.push('✅ جميع التواريخ في inspection_date مكتملة وصحيحة.\nتم التحقق من أن جميع القيم بالتنسيق dd-mm-YYYY.');
+  } else {
+    summary.push(`❌ عدد التواريخ غير الصحيحة في inspection_date: ${invalidCount}`);
+    summary.push('↳ يجب أن يكون تنسيق التاريخ dd-mm-YYYY.');
+  }
+  if (autoFixed) summary.push(`تم تصحيح تنسيق ${autoFixed} تاريخ تلقائيًا.`);
+  return { rows, highlights, summary };
+}
+
+function validateAssetUsageIdOnly(rows, header) {
+  let issues = 0;
+  const highlights = {};
+  const colIdx = header.indexOf('asset_usage_id');
+  let summary = [];
+  if (colIdx === -1) {
+    summary.push("❌ العمود asset_usage_id غير موجود في الملف.");
+    return { rows, highlights, summary };
+  }
+  rows.forEach((row, idx) => {
+    let val = row[colIdx];
+    if (isEmpty(val)) return;
+    const [ok, intval] = toInt(val);
+    if (!ok || intval === null || intval < 38 || intval > 56) {
+      highlights[`${idx},asset_usage_id`] = 'yellow';
+      row[colIdx] = appendMessage(row[colIdx], 'asset_usage_id يجب أن يكون بين 38 و 56');
+      issues++;
+    }
+  });
+  if (issues === 0) {
+    summary.push('✅ جميع البيانات في حقل asset_usage_id مكتملة وصحيحة.\nتم التحقق من أن جميع القيم تقع بين 38 و 56.');
+  } else {
+    summary.push(`❌ عدد القيم غير الصحيحة في asset_usage_id: ${issues}`);
+    summary.push('↳ يجب أن تكون جميع القيم في هذا الحقل بين 38 و 56.');
+  }
+  return { rows, highlights, summary };
+}
+
+function validateValueBaseOnly(rows, header) {
+  let issues = 0;
+  const highlights = {};
+  const colIdx = header.indexOf('value_base');
+  let summary = [];
+  if (colIdx === -1) {
+    summary.push("❌ العمود value_base غير موجود في الملف.");
+    return { rows, highlights, summary };
+  }
+  rows.forEach((row, idx) => {
+    let val = row[colIdx];
+    if (isEmpty(val)) return;
+    const [ok, intval] = toInt(val);
+    if (!ok || intval === null || intval < 1 || intval > 9) {
+      highlights[`${idx},value_base`] = 'yellow';
+      row[colIdx] = appendMessage(row[colIdx], 'value_base يجب أن يكون بين 1 و 9');
+      issues++;
+    }
+  });
+  if (issues === 0) {
+    summary.push('✅ جميع البيانات في حقل value_base مكتملة وصحيحة.\nتم التحقق من أن جميع القيم تقع بين 1 و 9.');
+  } else {
+    summary.push(`❌ عدد القيم غير الصحيحة في value_base: ${issues}`);
+    summary.push('↳ يجب أن تكون جميع القيم في هذا الحقل بين 1 و 9.');
+  }
+  return { rows, highlights, summary };
+}
+
+function validateMarketApproachOnly(rows, header) {
+  let issues = 0;
+  const highlights = {};
+  const idxMarketApproach = header.indexOf('market_approach');
+  const idxMarketApproachValue = header.indexOf('market_approach_value');
+  const idxFinalValue = header.indexOf('final_value');
+  let summary = [];
+  if (idxMarketApproach === -1) {
+    summary.push("❌ العمود market_approach غير موجود في الملف.");
+    return { rows, highlights, summary };
+  }
+  rows.forEach((row, idx) => {
+    let val = row[idxMarketApproach];
+    if (isEmpty(val)) return;
+    const [ok, intval] = toInt(val);
+    if (!ok || intval === null || ![0, 1, 2].includes(intval)) {
+      highlights[`${idx},market_approach`] = 'yellow';
+      row[idxMarketApproach] = appendMessage(row[idxMarketApproach], 'market_approach يجب أن يكون 0 أو 1 أو 2');
+      issues++;
+    } else if ((intval === 1 || intval === 2) && idxMarketApproachValue !== -1 && idxFinalValue !== -1) {
+      let v1 = row[idxMarketApproachValue];
+      let v2 = row[idxFinalValue];
+      if (String(v1).split('|')[0].trim() !== String(v2).split('|')[0].trim()) {
+        highlights[`${idx},market_approach_value`] = 'yellow';
+        row[idxMarketApproachValue] = appendMessage(row[idxMarketApproachValue], 'market_approach_value يجب أن يساوي final_value عندما يكون market_approach = 1 أو 2');
+        issues++;
+      }
+    }
+  });
+  if (issues === 0) {
+    summary.push('✅ جميع البيانات في حقل market_approach مكتملة وصحيحة.\nتم التحقق من أن القيم هي 0 أو 1 أو 2، وإذا كانت 1 أو 2 فإن market_approach_value يساوي final_value.');
+  } else {
+    summary.push(`❌ عدد القيم غير الصحيحة في market_approach: ${issues}`);
+    summary.push('↳ يجب أن تكون القيم في هذا الحقل 0 أو 1 أو 2، وإذا كانت 1 أو 2 يجب أن يكون market_approach_value مساويًا لـ final_value.');
+  }
+  return { rows, highlights, summary };
+}
+
+function validateCostApproachOnly(rows, header) {
+  let issues = 0;
+  const highlights = {};
+  const idxMarketApproach = header.indexOf('market_approach');
+  const idxCostApproach = header.indexOf('cost_approach');
+  const idxCostApproachValue = header.indexOf('cost_approach_value');
+  const idxFinalValue = header.indexOf('final_value');
+  let summary = [];
+  if (idxMarketApproach === -1 || idxCostApproach === -1) {
+    summary.push("❌ الأعمدة المطلوبة غير موجودة (market_approach أو cost_approach)");
+    return { rows, highlights, summary };
+  }
+  rows.forEach((row, idx) => {
+    let marketVal = row[idxMarketApproach];
+    if (isEmpty(marketVal)) return;
+    const [ok, intval] = toInt(marketVal);
+    if (!ok || intval !== 0) return;
+    if (idxCostApproach === -1) return;
+    let costVal = row[idxCostApproach];
+    const [ok2, costInt] = toInt(costVal);
+    if (!ok2 || ![1, 2].includes(costInt)) {
+      highlights[`${idx},cost_approach`] = 'yellow';
+      row[idxCostApproach] = appendMessage(row[idxCostApproach], 'cost_approach يجب أن يكون 1 أو 2 عندما يكون market_approach = 0');
+      issues++;
+    } else if ((costInt === 1 || 2) && idxCostApproachValue !== -1 && idxFinalValue !== -1) {
+      let v1 = row[idxCostApproachValue];
+      let v2 = row[idxFinalValue];
+      if (String(v1).split('|')[0].trim() !== String(v2).split('|')[0].trim()) {
+        highlights[`${idx},cost_approach_value`] = 'yellow';
+        row[idxCostApproachValue] = appendMessage(row[idxCostApproachValue], 'cost_approach_value يجب أن يساوي final_value عندما يكون cost_approach = 1 أو 2');
+        issues++;
+      }
+    }
+  });
+  if (issues === 0) {
+    summary.push('✅ جميع البيانات في حقل cost_approach مكتملة وصحيحة.\nتم التحقق من أن القيم مطابقة للشروط المطلوبة.');
+  } else {
+    summary.push(`❌ عدد القيم غير الصحيحة في cost_approach: ${issues}`);
+    summary.push('↳ إذا كان market_approach = 0 يجب أن يكون cost_approach = 1 أو 2، وإذا كان 1 أو 2 يجب أن يكون cost_approach_value مساويًا لـ final_value.');
+  }
   return { rows, highlights, summary };
 }
 
@@ -166,71 +323,24 @@ function validateAll(rows, header) {
   let dates = validateDatesOnly(rows, header);
   highlights = { ...highlights, ...dates.highlights };
   summary = summary.concat(dates.summary);
-  // 4) Additional numeric/range checks
+  // 4) Asset usage id
+  let assetUsage = validateAssetUsageIdOnly(rows, header);
+  highlights = { ...highlights, ...assetUsage.highlights };
+  summary = summary.concat(assetUsage.summary);
+  // 5) Value base
+  let valueBase = validateValueBaseOnly(rows, header);
+  highlights = { ...highlights, ...valueBase.highlights };
+  summary = summary.concat(valueBase.summary);
+  // 6) Market approach
+  let marketApproach = validateMarketApproachOnly(rows, header);
+  highlights = { ...highlights, ...marketApproach.highlights };
+  summary = summary.concat(marketApproach.summary);
+  // 7) Cost approach
+  let costApproach = validateCostApproachOnly(rows, header);
+  highlights = { ...highlights, ...costApproach.highlights };
+  summary = summary.concat(costApproach.summary);
+  // 8) Additional numeric/range checks
   let extraIssues = 0;
-  // asset_usage_id: integer 38..56
-  let idxAssetUsage = header.indexOf('asset_usage_id');
-  if (idxAssetUsage !== -1) {
-    rows.forEach((row, idx) => {
-      let val = row[idxAssetUsage];
-      if (isEmpty(val)) return;
-      const [ok, intval] = toInt(val);
-      if (!ok || intval === null || intval < ASSET_USAGE_MIN || intval > ASSET_USAGE_MAX) {
-        highlights[`${idx},asset_usage_id`] = 'yellow';
-        row[idxAssetUsage] = appendMessage(row[idxAssetUsage], `asset_usage_id must be in [${ASSET_USAGE_MIN}-${ASSET_USAGE_MAX}]`);
-        extraIssues++;
-      }
-    });
-  }
-  // value_base: integer 1..9
-  let idxValueBase = header.indexOf('value_base');
-  if (idxValueBase !== -1) {
-    rows.forEach((row, idx) => {
-      let val = row[idxValueBase];
-      if (isEmpty(val)) return;
-      const [ok, intval] = toInt(val);
-      if (!ok || intval === null || intval < VALUE_BASE_MIN || intval > VALUE_BASE_MAX) {
-        highlights[`${idx},value_base`] = 'yellow';
-        row[idxValueBase] = appendMessage(row[idxValueBase], `value_base must be in [${VALUE_BASE_MIN}-${VALUE_BASE_MAX}]`);
-        extraIssues++;
-      }
-    });
-  }
-  // market_approach: 0,1,2 (empty treated as 0)
-  let idxMarketApproach = header.indexOf('market_approach');
-  if (idxMarketApproach !== -1) {
-    rows.forEach((row, idx) => {
-      let val = row[idxMarketApproach];
-      if (isEmpty(val)) return;
-      const [ok, fval] = toFloat(val);
-      if (!ok || fval === null || !MARKET_APPROACH_ALLOWED.has(parseInt(fval))) {
-        highlights[`${idx},market_approach`] = 'yellow';
-        row[idxMarketApproach] = appendMessage(row[idxMarketApproach], 'market_approach must be 0, 1, or 2');
-        extraIssues++;
-      }
-    });
-  }
-  // market_approach_value: must be provided and numeric if approach in {1,2}; allowed empty if approach 0/empty
-  let idxMarketApproachValue = header.indexOf('market_approach_value');
-  if (idxMarketApproachValue !== -1) {
-    rows.forEach((row, idx) => {
-      let approachRaw = idxMarketApproach !== -1 ? row[idxMarketApproach] : '';
-      let approachEmpty = isEmpty(approachRaw);
-      let approach = 0;
-      if (!approachEmpty) {
-        try { approach = parseInt(parseFloat(String(approachRaw).trim())); } catch { approach = null; }
-      }
-      if (approach === 1 || approach === 2) {
-        let val = row[idxMarketApproachValue];
-        const [ok, fval] = toFloat(val);
-        if (!ok || fval === null) {
-          highlights[`${idx},market_approach_value`] = 'yellow';
-          row[idxMarketApproachValue] = appendMessage(row[idxMarketApproachValue], 'Must be a number when approach is 1 or 2');
-          extraIssues++;
-        }
-      }
-    });
-  }
   // production_capacity: if provided, must be non-negative number
   let idxProdCap = header.indexOf('production_capacity');
   if (idxProdCap !== -1) {
@@ -246,6 +356,9 @@ function validateAll(rows, header) {
     });
   }
   summary.push(`Additional rule violations: ${extraIssues}`);
+  if (summary.length === 0 || summary.every(s => s.match(/: 0$/))) {
+    summary.push('✅ جميع البيانات في هذا الفحص صحيحة.');
+  }
   return { rows, highlights, summary };
 }
 
@@ -363,7 +476,18 @@ app.post('/validate', upload.single('file'), async (req, res) => {
     // Final sweep: ensure no fills remain and enforce black text
     outWs.eachRow((row) => {
       row.eachCell((cell) => {
-        cell.fill = null;
+        // فقط أزل التلوين من رؤوس الأعمدة، واترك التلوين الأصفر للأخطاء
+        if (cell.row === 1) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF21A366' }
+          };
+        } else if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFFFFF00') {
+          // اترك التلوين الأصفر كما هو
+        } else {
+          cell.fill = null;
+        }
         // Ensure text is black; if font exists, keep size, else set default 11
         const size = (cell.font && cell.font.size) ? cell.font.size : 11;
         cell.font = { name: 'Calibri', color: { argb: 'FF000000' }, size };
@@ -407,6 +531,21 @@ app.post('/validate-preview', upload.single('file'), async (req, res) => {
       validated = validateMandatoryOnly(rows, header);
     } else if (type === 'final') {
       validated = validateFinalValueOnly(rows, header);
+    } else if (type === 'asset_usage') {
+      validated = validateAssetUsageIdOnly(rows, header);
+      // Only show the main summary message for this check
+      if (validated.summary.length > 1) {
+        validated.summary = [validated.summary[0]];
+      }
+    } else if (type === 'value_base') {
+      validated = validateValueBaseOnly(rows, header);
+      validated.summary = validated.summary.slice(0);
+    } else if (type === 'market_approach') {
+      validated = validateMarketApproachOnly(rows, header);
+      validated.summary = validated.summary.slice(0);
+    } else if (type === 'cost_approach') {
+      validated = validateCostApproachOnly(rows, header);
+      validated.summary = validated.summary.slice(0);
     } else if (type === 'sum') {
       // Only sum final_value
       let idx = header.indexOf('final_value');
@@ -420,7 +559,7 @@ app.post('/validate-preview', upload.single('file'), async (req, res) => {
           v = v.replace(/,/g, '');
         }
         // If empty string or null, treat as 0
-        if (v === '' || v === null || v === undefined) v = 0;
+        if (v === '' || null || v === undefined) v = 0;
         let num = parseFloat(v);
         if (isNaN(num)) num = 0;
         return acc + num;
@@ -429,6 +568,22 @@ app.post('/validate-preview', upload.single('file'), async (req, res) => {
       return res.json({ total });
     } else {
       validated = validateAll(rows, header);
+      // Calculate sum of final_value for summary
+      let idx = header.indexOf('final_value');
+      if (idx !== -1) {
+        total = rows.reduce((acc, row) => {
+          let v = row[idx];
+          if (typeof v === 'string') {
+            v = v.split('|')[0];
+            v = v.trim();
+            v = v.replace(/,/g, '');
+          }
+          if (v === '' || v === null || v === undefined) v = 0;
+          let num = parseFloat(v);
+          if (isNaN(num)) num = 0;
+          return acc + num;
+        }, 0);
+      }
     }
     const { rows: validatedRows, highlights, summary } = validated;
     const preview = validatedRows.map((row, i) => {
@@ -442,7 +597,7 @@ app.post('/validate-preview', upload.single('file'), async (req, res) => {
       return obj;
     });
     fs.unlinkSync(filePath);
-    res.json({ header, preview, summary });
+    res.json({ header, preview, summary, total });
   } catch (err) {
     res.status(500).json({ error: 'Error processing file: ' + err.message });
   }
